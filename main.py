@@ -31,7 +31,7 @@ def main():
     ip_addresses = unique_ip_addresses(data_set)
 
     print(json.dumps(intruders))
-    output_files(ip_addresses)
+    output_files(ip_addresses, intruders)
     return
 
 '''
@@ -47,9 +47,11 @@ def load_logs(path):
 '''
 write reports to disk
 '''
-def output_files(ips):
+def output_files(ips, intruders_list):
     with open('ip_addresses.json', 'w') as ip_file:
         ip_file.write(json.dumps(ips))
+    with open('intrusions.json', 'w') as intrustions:
+        intrusions.write(json.dumps(intruders_list))
     return
 
 '''
