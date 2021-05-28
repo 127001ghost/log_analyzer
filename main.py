@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+
+import os
+import json
+import argparse
+
+parser = argparse.ArgumentParser()
+
+events               = list()   # full data set
+intruders            = list()   # successful connections
+ip_addresses         = list()   # listof unique ips
+connection_frequency = dict()   # dictionary of ip and # of connection attempts
+
+'''
+    MAIN
+'''
+def main():
+    # setup arguments
+    parser.add_argument('-f', '--file', help='Relative path of the logfile', required=True)
+    parser.add_argument('-g', '--geolocation', help='Get geolocation of ip. May take a while.', action='store_true')
+    parser.add_argument('-s', '--summary', help='Display summary of metrics')
+    args = parser.parse_args()
+
+    load_logs(args.file)
+    intruders = successful_logins(events)
+
+    print(intruders)
+    return
+
+'''
+load the configure file and parse it into events
+'''
+def load_logs(path):
+    with open(path, 'r') as log_file:
+        for line in log_file:
+            parsed_line = json.loads(line)
+            events.append(parsed_line)
+    return
+
+'''
+write reports to disk
+'''
+def output_files():
+    pass
+
+'''
+this method will generate a list of successful logins.
+
+the structure will look like this:
+{
+    'ip_address': string,
+    'login_timestamp': string
+    'session_id': string
+    'creds'; string
+    'log_file': string
+    'commands': [string]
+}
+'''
+def successful_logins(events):
+    logins = list()
+    for event in events:
+        # check for successful logins
+        if event['eventid'] == 'cowrie.login.success':
+            logins.append({
+                'ip_address': event['src_ip'],
+                'login_timestamp': event['timestamp'],
+                'session_id': event['session']
+            })
+
+        # check for completed log files
+        if event['eventid'] == 'cowrie.log.closed':
+            for index, intruder in logins:
+                if logins[index]['session_id'] == event['session']:
+                    logins[index] = { **logins[index], 'log_file': event['ttylog'] }
+    return logins
+
+'''
+generate a list of the unique ip addresses
+'''
+def unique_ip_addresses():
+    pass
+
+'''
+get country name based on ip
+'''
+def ip_geolocation():
+    pass
+
+'''
+this will generate a dictionary containing each ip address and how many times
+they tried to connect.
+
+{
+    'ip': int
+}
+'''
+def connection_frequency():
+    pass
+
+'''
+    ENTRY
+'''
+main()
