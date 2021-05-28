@@ -50,7 +50,7 @@ write reports to disk
 def output_files(ips, intruders_list):
     with open('ip_addresses.json', 'w') as ip_file:
         ip_file.write(json.dumps(ips))
-    with open('intrusions.json', 'w') as intrustions:
+    with open('intrusions.json', 'w') as intrusions:
         intrusions.write(json.dumps(intruders_list))
     return
 
