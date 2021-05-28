@@ -93,6 +93,11 @@ def successful_logins(events):
                     logins[index]['commands'].append(event['input'])
                 else:
                     logins[index]['commands'] = [event['input']]
+        if event['eventid'] == 'cowrie.session.closed':
+            for index, intruder in enumerate(logins):
+                if logins[index]['session_id'] == event['session']:
+                    logins[index]['exit_timestamp'] = event['timestamp']
+                    logins[index]['duration'] = event['duration']
     return logins
 
 '''
