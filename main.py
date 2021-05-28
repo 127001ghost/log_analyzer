@@ -30,7 +30,7 @@ def main():
     intruders = successful_logins(data_set)
     ip_addresses = unique_ip_addresses(data_set)
 
-    print(intruders)
+    print(json.dumps(intruders))
     output_files(ip_addresses)
     return
 
@@ -73,8 +73,10 @@ def successful_logins(events):
             logins.append({
                 'ip_address': event['src_ip'],
                 'login_timestamp': event['timestamp'],
-                'session_id': event['session']
-            })
+                'session_id': event['session'],
+                'username': event['username'],
+                'password': event['password']
+            }
 
         # check for completed log files
         if event['eventid'] == 'cowrie.log.closed':
