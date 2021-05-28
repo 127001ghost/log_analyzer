@@ -46,9 +46,9 @@ def load_logs(path):
 '''
 write reports to disk
 '''
-def output_files():
+def output_files(ips):
     with open('ip_addresses.json', 'w') as ip_file:
-        ip_file.write(json.dumps(ip_addresses))
+        ip_file.write(json.dumps(ips))
     return
 
 '''
