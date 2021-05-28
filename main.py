@@ -76,7 +76,7 @@ def successful_logins(events):
                 'session_id': event['session'],
                 'username': event['username'],
                 'password': event['password']
-            }
+            })
 
         # check for completed log files
         if event['eventid'] == 'cowrie.log.closed':
