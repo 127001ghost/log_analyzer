@@ -30,6 +30,7 @@ def main():
     intruders = successful_logins(data_set)
     ip_addresses = unique_ip_addresses(data_set)
 
+    print(intruders)
     output_files(ip_addresses)
     return
 
