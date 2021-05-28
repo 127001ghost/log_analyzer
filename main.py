@@ -83,6 +83,14 @@ def successful_logins(events):
             for index, intruder in enumerate(logins):
                 if logins[index]['session_id'] == event['session']:
                     logins[index] = { **logins[index], 'log_file': event['ttylog'] }
+
+        # check session for commands
+        if event['eventid'] == 'cowrie.command.input':
+            for index, intruder in enumerate(logins):
+                if 'commands' in logins[index]:
+                    logins[index]['commands'].append(event['input'])
+                else:
+                    logins[index]['commands'] = [event['input']]
     return logins
 
 '''
