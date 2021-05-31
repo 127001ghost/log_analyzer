@@ -6,7 +6,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
-output_path = 'output/'
+output_path = 'output'
 
 data_set             = list()   # full data set
 intruders            = list()   # successful connections
@@ -81,9 +81,13 @@ write reports to disk
 '''
 def output_files(ips, intruders_list):
     try:
-        with open(output_path + 'ip_addresses.json', 'w') as ip_file:
+        # create dir if not exists
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+
+        with open(output_path + '/ip_addresses.json', 'w') as ip_file:
             ip_file.write(json.dumps(ips))
-        with open(output_path + 'intrusions.json', 'w') as intrusions:
+        with open(output_path + '/intrusions.json', 'w') as intrusions:
             intrusions.write(json.dumps(intruders_list))
     except:
         print('[!] something went wrong in output_files!')
