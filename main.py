@@ -20,12 +20,20 @@ def main():
     # setup arguments
     parser.add_argument('-f', '--file', help='Relative path of the logfile', required=True)
     parser.add_argument('-g', '--geolocation', help='Get geolocation of ip. May take a while.', action='store_true')
-    parser.add_argument('-s', '--summary', help='Display summary of metrics')
+    parser.add_argument('-s', '--summary', help='Display summary of metrics', action='store_true')
     parser.add_argument('-v', '--verbose', action='store_true')
 
-    # TODO: implements reporting options
+    # TODO: implement these
     parser.add_argument('-r', '--reports', help='Reports to generate', type=str)
+    parser.add_argument('--ping-back', help='Ping IP addresses', action='store_true')
+    parser.add_argument('--scan-back', help='Scan targets using Nmap', action='store_true')
     args = parser.parse_args()
+
+    if args.geolocation:
+        ans = input('[!] fetching geolocation may take a very long time, would you like to continue? (y/n) ')
+        if ans == 'n' or ans == 'N':
+            # might be better to just switch the flag to false and continue
+            exit(0)
 
     print('[*] starting log analyzer...')
     load_logs(args.file)
@@ -37,7 +45,20 @@ def main():
     intruders = successful_logins(data_set)
     ip_addresses = unique_ip_addresses(data_set)
 
+    if args.geolocation:
+        if args.verbose:
+            print('[*] fetching geolocation...')
+        ip_geolocation(data_set)
+
+    if args.verbose:
+        print('[*] writing files...')
     output_files(ip_addresses, intruders)
+
+    if args.summary:
+        print('[+] ----------------------------------------')
+        print(f'[+] total # of ips: {len(ip_addresses)}')
+        print(f'[+] total # of successful logins: {len(intruders)}')
+        print('[+] ----------------------------------------')
     print('[+] completed!')
     return
 
@@ -52,6 +73,7 @@ def load_logs(path):
                 data_set.append(parsed_line)
     except:
         print('[!] something went wrong in load_logs!')
+        exit(1)
     return
 
 '''
