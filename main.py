@@ -6,6 +6,8 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
+output_path = 'output/'
+
 data_set             = list()   # full data set
 intruders            = list()   # successful connections
 ip_addresses         = list()   # listof unique ips
@@ -20,38 +22,51 @@ def main():
     parser.add_argument('-g', '--geolocation', help='Get geolocation of ip. May take a while.', action='store_true')
     parser.add_argument('-s', '--summary', help='Display summary of metrics')
     parser.add_argument('-v', '--verbose', action='store_true')
+
+    # TODO: implements reporting options
+    parser.add_argument('-r', '--reports', help='Reports to generate')
     args = parser.parse_args()
 
     print('[*] starting log analyzer...')
     load_logs(args.file)
-    print('[+] log file loaded!')
-    print('[*] generating reports...')
+
+    if args.verbose:
+        print('[+] log file loaded!')
+        print('[*] generating reports...')
 
     intruders = successful_logins(data_set)
     ip_addresses = unique_ip_addresses(data_set)
 
     print(json.dumps(intruders))
     output_files(ip_addresses, intruders)
+
+    print('[+] completed!')
     return
 
 '''
 load the configure file and parse it into events
 '''
 def load_logs(path):
-    with open(path, 'r') as log_file:
-        for line in log_file:
-            parsed_line = json.loads(line)
-            data_set.append(parsed_line)
+    try:
+        with open(path, 'r') as log_file:
+            for line in log_file:
+                parsed_line = json.loads(line)
+                data_set.append(parsed_line)
+    except:
+        print('[!] something went wrong in load_logs!')
     return
 
 '''
 write reports to disk
 '''
 def output_files(ips, intruders_list):
-    with open('ip_addresses.json', 'w') as ip_file:
-        ip_file.write(json.dumps(ips))
-    with open('intrusions.json', 'w') as intrusions:
-        intrusions.write(json.dumps(intruders_list))
+    try:
+        with open(output_path + 'ip_addresses.json', 'w') as ip_file:
+            ip_file.write(json.dumps(ips))
+        with open(output_path + 'intrusions.json', 'w') as intrusions:
+            intrusions.write(json.dumps(intruders_list))
+    except:
+        print('[!] something went wrong in output_files!')
     return
 
 '''
@@ -93,6 +108,7 @@ def successful_logins(events):
                     logins[index]['commands'].append(event['input'])
                 else:
                     logins[index]['commands'] = [event['input']]
+        # check for logout times and duration
         if event['eventid'] == 'cowrie.session.closed':
             for index, intruder in enumerate(logins):
                 if logins[index]['session_id'] == event['session']:
@@ -124,7 +140,7 @@ they tried to connect.
     'ip': int
 }
 '''
-def connection_frequency():
+def connection_frequency(events):
     pass
 
 '''
