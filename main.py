@@ -24,7 +24,7 @@ def main():
     parser.add_argument('-v', '--verbose', action='store_true')
 
     # TODO: implements reporting options
-    parser.add_argument('-r', '--reports', help='Reports to generate')
+    parser.add_argument('-r', '--reports', help='Reports to generate', type=str)
     args = parser.parse_args()
 
     print('[*] starting log analyzer...')
@@ -37,9 +37,7 @@ def main():
     intruders = successful_logins(data_set)
     ip_addresses = unique_ip_addresses(data_set)
 
-    print(json.dumps(intruders))
     output_files(ip_addresses, intruders)
-
     print('[+] completed!')
     return
 
