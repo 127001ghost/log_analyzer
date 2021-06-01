@@ -12,7 +12,7 @@ data_set             = list()   # full data set
 intruders            = list()   # successful connections
 ip_addresses         = list()   # listof unique ips
 connection_frequency = dict()   # dictionary of ip and # of connection attempts
-credentials     = dict()   # dict of ip and the creds they tried
+credentials          = dict()   # dict of ip and the creds they tried
 
 '''
     MAIN
