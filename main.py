@@ -12,6 +12,7 @@ data_set             = list()   # full data set
 intruders            = list()   # successful connections
 ip_addresses         = list()   # listof unique ips
 connection_frequency = dict()   # dictionary of ip and # of connection attempts
+credentials     = dict()   # dict of ip and the creds they tried
 
 '''
     MAIN
@@ -44,6 +45,7 @@ def main():
 
     intruders = successful_logins(data_set)
     ip_addresses = unique_ip_addresses(data_set)
+    credentials = used_credentials(data_set)
 
     if args.geolocation:
         if args.verbose:
@@ -52,7 +54,7 @@ def main():
 
     if args.verbose:
         print('[*] writing files...')
-    output_files(ip_addresses, intruders)
+    output_files(ip_addresses, intruders, credentials)
 
     if args.summary:
         print('[+] ----------------------------------------')
@@ -79,7 +81,7 @@ def load_logs(path):
 '''
 write reports to disk
 '''
-def output_files(ips, intruders_list):
+def output_files(ips, intruders_list, cred_list):
     try:
         # create dir if not exists
         if not os.path.exists(output_path):
@@ -89,6 +91,8 @@ def output_files(ips, intruders_list):
             ip_file.write(json.dumps(ips))
         with open(output_path + '/intrusions.json', 'w') as intrusions:
             intrusions.write(json.dumps(intruders_list))
+        with open(output_path + '/credentials.json', 'w') as creds:
+            creds.write(json.dumps(cred_list))
     except:
         print('[!] something went wrong in output_files!')
     return
@@ -165,6 +169,30 @@ they tried to connect.
 }
 '''
 def connection_frequency(events):
+    for event in events:
+        if event['src_ip'] not in connection_frequency:
+            print('not implemented')
+    pass
+
+'''
+make associations with ip and creds
+should create a list like this:
+ip: ['username:password', 'username:password']
+'''
+def used_credentials(events):
+    creds = dict()
+    for event in events:
+        if event['eventid'] == 'cowrie.login.success':
+            if event['src_ip'] in creds:
+                creds[event['src_ip']].append(f"{event['username']}:{event['password']}")
+            else:
+                creds[event['src_ip']] = [f"{event['username']}:{event['password']}"]
+    return creds
+
+'''
+ping addresses in the list of ips and determine which ones are up
+'''
+def ping():
     pass
 
 '''
