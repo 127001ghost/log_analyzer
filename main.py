@@ -68,6 +68,7 @@ def main():
         print('[+] ----------------------------------------')
         print(f'[+] total # of ips: {len(ip_addresses)}')
         print(f'[+] total # of successful logins: {len(intruders)}')
+        print(f'[+] total # of tor hits: {len(tor_ips)}')
         print('[+] ----------------------------------------')
     print('[+] completed!')
     return
@@ -203,18 +204,22 @@ def used_credentials(events):
 detect if an ip address is a tor node
 '''
 def detect_tor(ip_list):
-    tor_exit_nodes = list()
+    tor_nodes = list()
     all_tor_exit_nodes = requests.get('https://check.torproject.org/cgi-bin/TorBulkExitList.py')
+    all_tor_relay_nodes = requests.get('https://lists.fissionrelays.net/tor/relays-ipv4.txt')
 
-    if all_tor_exit_nodes.status_code != 200:
+    if all_tor_exit_nodes.status_code != 200 or all_tor_relay_nodes.status_code != 200:
         print('[!] error while checking the tor list!')
         return
 
-    nodes = all_tor_exit_nodes.text
+    exit_nodes = all_tor_exit_nodes.text
+    relay_nodes = all_tor_relay_nodes.text
     for ip in ip_list:
-        if ip in nodes:
-            tor_exit_nodes.append(ip)
-    return tor_exit_nodes
+        if ip in exit_nodes:
+            tor_nodes.append(ip)
+        elif ip in relay_nodes:
+            tor_nodes.append(ip)
+    return tor_nodes
 
 '''
 ping addresses in the list of ips and determine which ones are up
