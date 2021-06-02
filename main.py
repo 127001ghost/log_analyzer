@@ -53,6 +53,7 @@ def main():
     intruders = successful_logins(data_set)
     ip_addresses = unique_ip_addresses(data_set)
     credentials = used_credentials(data_set)
+    connection_frequency = repeated_connections(data_set)
     tor_ips = detect_tor(ip_addresses)
 
     if args.geolocation:
@@ -62,7 +63,7 @@ def main():
 
     if args.verbose:
         print('[*] writing files...')
-    output_files(ip_addresses, intruders, credentials, tor_ips)
+    output_files(ip_addresses, intruders, credentials, tor_ips, connection_frequency)
 
     if args.summary:
         print('[+] ----------------------------------------')
@@ -90,7 +91,7 @@ def load_logs(path):
 '''
 write reports to disk
 '''
-def output_files(ips, intruders_list, cred_list, tor_list):
+def output_files(ips, intruders_list, cred_list, tor_list, repeat_list):
     try:
         # create dir if not exists
         if not os.path.exists(output_path):
@@ -104,6 +105,8 @@ def output_files(ips, intruders_list, cred_list, tor_list):
             creds.write(json.dumps(cred_list))
         with open(output_path + '/tor_ips.json', 'w') as tor_file:
             tor_file.write(json.dumps(tor_list))
+        with open(output_path + '/repeated_connections.json', 'w') as repeat_file:
+            repeat_file.write(json.dumps(repeat_list))
     except:
         print('[!] something went wrong in output_files!')
     return
@@ -157,7 +160,7 @@ def successful_logins(events):
                     logins[index]['commands'].append(event['input'])
                 elif 'commands' not in logins[index] and logins[index]['session_id'] == event['session']:
                     logins[index]['commands'] = [event['input']]
-     return logins
+    return logins
 
 '''
 generate a list of the unique ip addresses
@@ -177,11 +180,14 @@ they tried to connect.
     'ip': int
 }
 '''
-def connection_frequency(events):
+def repeated_connections(events):
+    repeated_attempts = dict()
     for event in events:
-        if event['src_ip'] not in connection_frequency:
-            print('not implemented')
-    pass
+        if event['src_ip'] not in repeated_attempts:
+            repeated_attempts[event['src_ip']] = 1
+        else:
+            repeated_attempts[event['src_ip']] = repeated_attempts[event['src_ip']] + 1
+    return repeated_attempts
 
 '''
 make associations with ip and creds
