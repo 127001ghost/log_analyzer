@@ -22,12 +22,12 @@ tor_ips              = list()   # detect tor ips
 def main():
     # setup arguments
     parser.add_argument('-f', '--file', help='Relative path of the logfile', required=True)
-    parser.add_argument('-g', '--geolocation', help='Get geolocation of ip. May take a while.', action='store_true')
     parser.add_argument('-s', '--summary', help='Display summary of metrics', action='store_true')
     parser.add_argument('-v', '--verbose', action='store_true')
     parser.add_argument('-dt', '--detect-tor', help='Check if ips are a tor exit node', action='store_true')
 
     # TODO: implement these
+    parser.add_argument('-g', '--geolocation', help='Get geolocation of ip. May take a while.', action='store_true')
     parser.add_argument('-r', '--reports', help='Reports to generate', type=str)
     parser.add_argument('--ping-back', help='Ping IP addresses', action='store_true')
     parser.add_argument('--scan-back', help='Scan targets using Nmap', action='store_true')
@@ -39,7 +39,7 @@ def main():
         if ans == 'n' or ans == 'N':
             exit(0)
     if args.detect_tor:
-        ans = input('[!] checking for tor addresses will make an http request! would you like to continue? (y/n) ')
+        ans = input('[!] checking for tor addresses will make 2 http requests! would you like to continue? (y/n) ')
         if ans.lower() == 'n':
             exit(0)
 
@@ -115,8 +115,11 @@ the structure will look like this:
 {
     'ip_address': string,
     'login_timestamp': string
+    'exit_timestamp': string
+    'duration': float
     'session_id': string
-    'creds'; string
+    'username': string
+    'password': string
     'log_file': string
     'commands': [string]
 }
@@ -140,6 +143,13 @@ def successful_logins(events):
                 if logins[index]['session_id'] == event['session']:
                     logins[index] = { **logins[index], 'log_file': event['ttylog'] }
 
+        # check for logout times and duration
+        if event['eventid'] == 'cowrie.session.closed':
+            for index, intruder in enumerate(logins):
+                if logins[index]['session_id'] == event['session']:
+                    logins[index]['exit_timestamp'] = event['timestamp']
+                    logins[index]['duration'] = event['duration']
+
         # check session for commands
         if event['eventid'] == 'cowrie.command.input':
             for index, intruder in enumerate(logins):
@@ -147,14 +157,7 @@ def successful_logins(events):
                     logins[index]['commands'].append(event['input'])
                 elif 'commands' not in logins[index] and logins[index]['session_id'] == event['session']:
                     logins[index]['commands'] = [event['input']]
-
-        # check for logout times and duration
-        if event['eventid'] == 'cowrie.session.closed':
-            for index, intruder in enumerate(logins):
-                if logins[index]['session_id'] == event['session']:
-                    logins[index]['exit_timestamp'] = event['timestamp']
-                    logins[index]['duration'] = event['duration']
-    return logins
+     return logins
 
 '''
 generate a list of the unique ip addresses
@@ -165,12 +168,6 @@ def unique_ip_addresses(events):
         if event['src_ip'] not in ips:
             ips.append(event['src_ip'])
     return ips
-
-'''
-get country name based on ip
-'''
-def ip_geolocation():
-    pass
 
 '''
 this will generate a dictionary containing each ip address and how many times
@@ -221,6 +218,12 @@ def detect_tor(ip_list):
         elif ip in relay_nodes:
             tor_nodes.append(ip)
     return tor_nodes
+
+'''
+get country name based on ip
+'''
+def ip_geolocation():
+    pass
 
 '''
 ping addresses in the list of ips and determine which ones are up
