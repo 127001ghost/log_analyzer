@@ -3,6 +3,7 @@
 import os
 import json
 import argparse
+import requests
 
 parser = argparse.ArgumentParser()
 
@@ -13,6 +14,7 @@ intruders            = list()   # successful connections
 ip_addresses         = list()   # listof unique ips
 connection_frequency = dict()   # dictionary of ip and # of connection attempts
 credentials          = dict()   # dict of ip and the creds they tried
+tor_ips              = list()   # detect tor ips
 
 '''
     MAIN
@@ -23,6 +25,7 @@ def main():
     parser.add_argument('-g', '--geolocation', help='Get geolocation of ip. May take a while.', action='store_true')
     parser.add_argument('-s', '--summary', help='Display summary of metrics', action='store_true')
     parser.add_argument('-v', '--verbose', action='store_true')
+    parser.add_argument('-dt', '--detect-tor', help='Check if ips are a tor exit node', action='store_true')
 
     # TODO: implement these
     parser.add_argument('-r', '--reports', help='Reports to generate', type=str)
@@ -30,10 +33,14 @@ def main():
     parser.add_argument('--scan-back', help='Scan targets using Nmap', action='store_true')
     args = parser.parse_args()
 
+    # confirm for functions that make http requests
     if args.geolocation:
         ans = input('[!] fetching geolocation may take a very long time, would you like to continue? (y/n) ')
         if ans == 'n' or ans == 'N':
-            # might be better to just switch the flag to false and continue
+            exit(0)
+    if args.detect_tor:
+        ans = input('[!] checking for tor addresses will make an http request! would you like to continue? (y/n) ')
+        if ans.lower() == 'n':
             exit(0)
 
     print('[*] starting log analyzer...')
@@ -46,6 +53,7 @@ def main():
     intruders = successful_logins(data_set)
     ip_addresses = unique_ip_addresses(data_set)
     credentials = used_credentials(data_set)
+    tor_ips = detect_tor(ip_addresses)
 
     if args.geolocation:
         if args.verbose:
@@ -54,7 +62,7 @@ def main():
 
     if args.verbose:
         print('[*] writing files...')
-    output_files(ip_addresses, intruders, credentials)
+    output_files(ip_addresses, intruders, credentials, tor_ips)
 
     if args.summary:
         print('[+] ----------------------------------------')
@@ -81,7 +89,7 @@ def load_logs(path):
 '''
 write reports to disk
 '''
-def output_files(ips, intruders_list, cred_list):
+def output_files(ips, intruders_list, cred_list, tor_list):
     try:
         # create dir if not exists
         if not os.path.exists(output_path):
@@ -93,6 +101,8 @@ def output_files(ips, intruders_list, cred_list):
             intrusions.write(json.dumps(intruders_list))
         with open(output_path + '/credentials.json', 'w') as creds:
             creds.write(json.dumps(cred_list))
+        with open(output_path + '/tor_ips.json', 'w') as tor_file:
+            tor_file.write(json.dumps(tor_list))
     except:
         print('[!] something went wrong in output_files!')
     return
@@ -190,9 +200,32 @@ def used_credentials(events):
     return creds
 
 '''
+detect if an ip address is a tor node
+'''
+def detect_tor(ip_list):
+    tor_exit_nodes = list()
+    all_tor_exit_nodes = requests.get('https://check.torproject.org/cgi-bin/TorBulkExitList.py')
+
+    if all_tor_exit_nodes.status_code != 200:
+        print('[!] error while checking the tor list!')
+        return
+
+    nodes = all_tor_exit_nodes.text
+    for ip in ip_list:
+        if ip in nodes:
+            tor_exit_nodes.append(ip)
+    return tor_exit_nodes
+
+'''
 ping addresses in the list of ips and determine which ones are up
 '''
 def ping():
+    pass
+
+'''
+run an nmap stealth scan on targets
+'''
+def scan_ip():
     pass
 
 '''
