@@ -33,6 +33,9 @@ def main():
     parser.add_argument('--scan-back', help='Scan targets using Nmap', action='store_true')
     args = parser.parse_args()
 
+    # flag for removing tor ips from the ip_addresses list
+    filter_tor_addresses = False
+
     # confirm for functions that make http requests
     if args.geolocation:
         ans = input('[!] fetching geolocation may take a very long time, would you like to continue? (y/n) ')
@@ -42,6 +45,9 @@ def main():
         ans = input('[!] checking for tor addresses will make 2 http requests! would you like to continue? (y/n) ')
         if ans.lower() == 'n':
             exit(0)
+        filter_tor = input('[!] would you like to remove tor ips from the ip report? (y/n) ')
+        if filter_tor.lower() == 'y':
+            filter_tor_addresses = True
 
     print('[*] starting log analyzer...')
     load_logs(args.file)
@@ -50,11 +56,17 @@ def main():
         print('[+] log file loaded!')
         print('[*] generating reports...')
 
-    intruders = successful_logins(data_set)
-    ip_addresses = unique_ip_addresses(data_set)
-    credentials = used_credentials(data_set)
-    connection_frequency = repeated_connections(data_set)
-    tor_ips = detect_tor(ip_addresses)
+    intruders               = successful_logins(data_set)
+    ip_addresses            = unique_ip_addresses(data_set)
+    credentials             = used_credentials(data_set)
+    connection_frequency    = repeated_connections(data_set)
+    tor_ips                 = detect_tor(ip_addresses)
+
+    # filter out tor ips
+    if filter_tor_addresses:
+        for ip in tor_ips:
+            if ip in ip_addresses:
+                ip_addresses.remove(ip)
 
     if args.geolocation:
         if args.verbose:
@@ -69,7 +81,7 @@ def main():
         print('[+] ----------------------------------------')
         print(f'[+] total # of ips: {len(ip_addresses)}')
         print(f'[+] total # of successful logins: {len(intruders)}')
-        print(f'[+] total # of tor hits: {len(tor_ips)}')
+        print(f'[+] total # of tor ips: {len(tor_ips)}')
         print('[+] ----------------------------------------')
     print('[+] completed!')
     return
