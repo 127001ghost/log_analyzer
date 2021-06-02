@@ -147,6 +147,7 @@ def successful_logins(events):
                     logins[index]['commands'].append(event['input'])
                 elif 'commands' not in logins[index] and logins[index]['session_id'] == event['session']:
                     logins[index]['commands'] = [event['input']]
+
         # check for logout times and duration
         if event['eventid'] == 'cowrie.session.closed':
             for index, intruder in enumerate(logins):
