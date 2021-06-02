@@ -258,4 +258,5 @@ def scan_ip():
 '''
     ENTRY
 '''
-main()
+if __name__ == '__main__':
+    main()
