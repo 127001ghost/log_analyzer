@@ -165,6 +165,13 @@ def successful_logins(events):
                     logins[index]['exit_timestamp'] = event['timestamp']
                     logins[index]['duration'] = event['duration']
 
+        # check for files
+        if event['eventid'] == 'cowrie.session.file_upload':
+            for index, intruder in enumerate(logins):
+                if logins[index]['session_id'] == event['session']:
+                    logins[index]['file_uploaded'] = event['filename']
+                    logins[index]['outfile'] = event['outfile']
+
         # check session for commands
         if event['eventid'] == 'cowrie.command.input':
             for index, intruder in enumerate(logins):
