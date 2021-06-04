@@ -10,6 +10,9 @@ import json
 import argparse
 import requests
 
+'''
+class to store reports
+'''
 class Store():
     def __init__(self):
         self.output_path            = 'output'
@@ -24,9 +27,78 @@ class Store():
         self.tor_addresses          = list()
         self.tcp_data               = dict()
 
+
+###################################################
+#                    MAIN
+###################################################
+def main():
+    # setup arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--file', help='Relative path of log file', required=True)
+    parser.add_argument('-s', '--summary', help='Display summary of metrics', action='store_true')
+    parser.add_argument('-v', '--verbose', help='Verbose output', action='store_true')
+    parser.add_argument('-o', '--output', help='Path of output destination. Default is ./output', type=str)
+    parser.add_argument('-dt', '--detect-tor', help='Detect tor ip addresses', action='store_true')
+    args = parser.parse_args()
+
+    # initialize the store
+    store = Store()
+
+    if args.verbose:
+        store.verbose = True
+    if args.output:
+        print(args.output)
+        store.output_path = args.output
+    if args.detect_tor:
+        answer = input('[!] detecting tor ips will make 2 http requests! do you wish to continue? (y/n) ')
+        if answer.lower() == 'n':
+            exit(0)
+        answer = input('[!] would you like to remove tor addresses from the ip report? (y/n) ')
+        if answer.lower() == 'y':
+            store.remove_tor_addresses = True
+
+    print('[*] starting analyzer...')
+
+    # load and parse the log file
+    load_logs(store, args.file)
+
+    if store.verbose:
+        print('[+] logs loaded!')
+        print('[*] parsing events...')
+
+    # loop through eventids
+    for event in store.events:
+        if event['eventid'] == 'cowrie.login.success':
+            event_login_success(store, event)
+        if event['eventid'] == 'cowrie.log.closed':
+            event_log_closed(store, event)
+        if event['eventid'] == 'cowrie.session.closed':
+            event_session_closed(store, event)
+        if event['eventid'] == 'cowrie.session.file_upload':
+            event_file_upload(store, event)
+        if event['eventid'] == 'cowrie.command.input':
+            event_command_input(store, event)
+
+    if store.verbose:
+        print('[+] all events parsed!')
+
+    if args.detect_tor:
+        detect_tor_addresses(store)
+
+    write_reports(store)
+
+    if args.summary:
+        display_summary(store)
+    print('[+] completed!')
+    return
+
+
 ###################################################
 #                EVENT HANDLING
 ###################################################
+'''
+handle 'cowire.login.success'
+'''
 def event_login_success(store, event):
     source_ip = event['src_ip']
 
@@ -57,12 +129,18 @@ def event_login_success(store, event):
 
     return
 
+'''
+handle 'cowrie.log.closed'
+'''
 def event_log_closed(store, event):
     for login in store.successful_logins:
         if login['session_id'] == event['session']:
             login['log_file'] = event['ttylog']
     return
 
+'''
+handle 'cowrie.session.closed'
+'''
 def event_session_closed(store, event):
     for login in store.successful_logins:
         if login['session_id'] == event['session']:
@@ -70,6 +148,9 @@ def event_session_closed(store, event):
             login['duration'] = event['duration']
     return
 
+'''
+handle 'cowrie.file.upload'
+'''
 def event_file_upload(store, event):
     for login in store.successful_logins:
         if login['session_id'] == event['session']:
@@ -77,6 +158,9 @@ def event_file_upload(store, event):
             login['outfile'] = event['outfile']
     return
 
+'''
+handle 'cowrie.command.input'
+'''
 def event_command_input(store, event):
     for login in store.successful_logins:
         if login['session_id'] == event['session']:
@@ -85,6 +169,7 @@ def event_command_input(store, event):
             else:
                 login['commands'] = [ event['input'] ]
     return
+
 
 ####################################################
 #                   MISC
@@ -140,7 +225,6 @@ def detect_tor_addresses(store):
     for ip in store.ip_addresses:
         if ip in exit_nodes or ip in relay_nodes:
             store.tor_addresses.append(ip)
-
             if store.remove_tor_addresses:
                 store.ip_addresses.remove(ip)
     return
@@ -153,68 +237,9 @@ def display_summary(store):
     print('[+] -------------------------------------')
     return
 
-###################################################
-#                    MAIN
-###################################################
-def main():
-    # setup arguments
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--file', help='Relative path of log file', required=True)
-    parser.add_argument('-s', '--summary', help='Display summary of metrics', action='store_true')
-    parser.add_argument('-v', '--verbose', help='Verbose output', action='store_true')
-    parser.add_argument('-o', '--output', help='Path of output destination. Default is ./output', type=str)
-    parser.add_argument('-dt', '--detect-tor', help='Detect tor ip addresses', action='store_true')
-    args = parser.parse_args()
 
-    # initialize the store
-    store = Store()
-
-    if args.verbose:
-        store.verbose = True
-    if args.output:
-        print(args.output)
-        store.output_path = args.output
-    if args.detect_tor:
-        answer = input('[!] detecting tor ips will make 2 http requests! do you wish to continue? (y/n) ')
-        if answer.lower() == 'n':
-            exit(0)
-        answer = input('[!] would you like to remove tor addresses from the ip report? (y/n) ')
-        if answer.lower() == 'y':
-            store.remove_tor_addresses = True
-
-    print('[*] starting analyzer...')
-
-    # load and parse the log file
-    load_logs(store, args.file)
-
-    if store.verbose:
-        print('[+] logs loaded!')
-        print('[*] parsing events...')
-
-    # capture all logins first
-    for event in store.events:
-        if event['eventid'] == 'cowrie.login.success':
-            event_login_success(store, event)
-        if event['eventid'] == 'cowrie.log.closed':
-            event_log_closed(store, event)
-        if event['eventid'] == 'cowrie.session.closed':
-            event_session_closed(store, event)
-        if event['eventid'] == 'cowrie.session.file_upload':
-            event_file_upload(store, event)
-        if event['eventid'] == 'cowrie.command.input':
-            event_command_input(store, event)
-
-    if store.verbose:
-        print('[+] all events parsed!')
-
-    if args.detect_tor:
-        detect_tor_addresses(store)
-
-    write_reports(store)
-
-    if args.summary:
-        display_summary(store)
-    print('[+] completed!')
-
+####################################################
+#                   ENTRY
+####################################################
 if __name__ == '__main__':
     main()
