@@ -2,9 +2,7 @@
 '''
 127001ghost
 cowrie log analyzer
-v0.1.0
-
-this program creates files containing information extracted from cowrie logs
+v0.1.1
 '''
 
 import os
@@ -91,10 +89,6 @@ def event_command_input(store, event):
 ####################################################
 #                   MISC
 ####################################################
-
-'''
-load log file into events
-'''
 def load_logs(store, file_path):
     if store.verbose:
         print('[*] loading logs...')
@@ -107,10 +101,7 @@ def load_logs(store, file_path):
         exit(1)
     return
 
-'''
-write logs to disk
-'''
-def output_reports(store):
+def write_reports(store):
     if store.verbose:
         print('[*] writing logs to disk...')
     try:
@@ -125,6 +116,8 @@ def output_reports(store):
             credential_file.write(json.dumps(store.credentials))
         with open(store.output_path + '/repeated_connections.json', 'w') as repeat_file:
             repeat_file.write(json.dumps(store.repeated_connections))
+        with open(store.output_path + '/tor_addresses.json', 'w') as tor_file:
+            tor_file.write(json.dumps(store.tor_addresses))
     except Exception as ex:
         print(ex)
         print('[!] error writing files to disk!')
@@ -159,6 +152,7 @@ def display_summary(store):
     print(f'[+] total # of tor users: {len(store.tor_addresses)}')
     print('[+] -------------------------------------')
     return
+
 ###################################################
 #                    MAIN
 ###################################################
@@ -181,7 +175,7 @@ def main():
         print(args.output)
         store.output_path = args.output
     if args.detect_tor:
-        answer = input('[!] detecting tor ips will make 2 http requsts! do you wish to continue? (y/n) ')
+        answer = input('[!] detecting tor ips will make 2 http requests! do you wish to continue? (y/n) ')
         if answer.lower() == 'n':
             exit(0)
         answer = input('[!] would you like to remove tor addresses from the ip report? (y/n) ')
@@ -216,7 +210,7 @@ def main():
     if args.detect_tor:
         detect_tor_addresses(store)
 
-    output_reports(store)
+    write_reports(store)
 
     if args.summary:
         display_summary(store)
