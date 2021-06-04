@@ -1,269 +1,226 @@
 #!/usr/bin/env python3
+'''
+127001ghost
+cowrie log analyzer
+v0.1.0
+
+this program creates files containing information extracted from cowrie logs
+'''
 
 import os
 import json
 import argparse
 import requests
 
-parser = argparse.ArgumentParser()
+class Store():
+    def __init__(self):
+        self.output_path            = 'output'
+        self.verbose                = False
+        self.remove_tor_addresses   = False
 
-output_path = 'output'
+        self.events                 = list()
+        self.successful_logins      = list()
+        self.ip_addresses           = list()
+        self.repeated_connections   = dict()
+        self.credentials            = dict()
+        self.tor_addresses          = list()
+        self.tcp_data               = dict()
 
-data_set             = list()   # full data set
-intruders            = list()   # successful connections
-ip_addresses         = list()   # listof unique ips
-connection_frequency = dict()   # dictionary of ip and # of connection attempts
-credentials          = dict()   # dict of ip and the creds they tried
-tor_ips              = list()   # detect tor ips
+###################################################
+#                EVENT HANDLING
+###################################################
+def event_login_success(store, event):
+    source_ip = event['src_ip']
 
-'''
-    MAIN
-'''
-def main():
-    # setup arguments
-    parser.add_argument('-f', '--file', help='Relative path of the logfile', required=True)
-    parser.add_argument('-s', '--summary', help='Display summary of metrics', action='store_true')
-    parser.add_argument('-v', '--verbose', action='store_true')
-    parser.add_argument('-dt', '--detect-tor', help='Check if ips are a tor exit node', action='store_true')
+    # add a new login
+    store.successful_logins.append({
+        'ip_address':       event['src_ip'],
+        'login_timestamp':  event['timestamp'],
+        'session_id':       event['session'],
+        'username':         event['username'],
+        'password':         event['password']
+    })
 
-    # TODO: implement these
-    parser.add_argument('-g', '--geolocation', help='Get geolocation of ip. May take a while.', action='store_true')
-    parser.add_argument('-r', '--reports', help='Reports to generate', type=str)
-    parser.add_argument('--ping-back', help='Ping IP addresses', action='store_true')
-    parser.add_argument('--scan-back', help='Scan targets using Nmap', action='store_true')
-    args = parser.parse_args()
+    # add ip to list
+    if source_ip not in store.ip_addresses:
+        store.ip_addresses.append(source_ip)
 
-    # flag for removing tor ips from the ip_addresses list
-    filter_tor_addresses = False
+    # add credentials to list
+    if source_ip not in store.credentials:
+        store.credentials[source_ip] = [f"{event['username']} :: {event['password']}"]
+    else:
+        store.credentials[source_ip].append(f"{event['username']} :: {event['password']}")
 
-    # confirm for functions that make http requests
-    if args.geolocation:
-        ans = input('[!] fetching geolocation may take a very long time, would you like to continue? (y/n) ')
-        if ans == 'n' or ans == 'N':
-            exit(0)
-    if args.detect_tor:
-        ans = input('[!] checking for tor addresses will make 2 http requests! would you like to continue? (y/n) ')
-        if ans.lower() == 'n':
-            exit(0)
-        filter_tor = input('[!] would you like to remove tor ips from the ip report? (y/n) ')
-        if filter_tor.lower() == 'y':
-            filter_tor_addresses = True
+    # check for repeat connection
+    if source_ip not in store.repeated_connections:
+        store.repeated_connections[source_ip] = 1
+    else:
+        store.repeated_connections[source_ip] = store.repeated_connections[source_ip] + 1
 
-    print('[*] starting log analyzer...')
-    load_logs(args.file)
-
-    if args.verbose:
-        print('[+] log file loaded!')
-        print('[*] generating reports...')
-
-    intruders               = successful_logins(data_set)
-    ip_addresses            = unique_ip_addresses(data_set)
-    credentials             = used_credentials(data_set)
-    connection_frequency    = repeated_connections(data_set)
-    tor_ips                 = detect_tor(ip_addresses)
-
-    # filter out tor ips
-    if filter_tor_addresses:
-        for ip in tor_ips:
-            if ip in ip_addresses:
-                ip_addresses.remove(ip)
-
-    if args.geolocation:
-        if args.verbose:
-            print('[*] fetching geolocation...')
-        ip_geolocation(data_set)
-
-    if args.verbose:
-        print('[*] writing files...')
-    output_files(ip_addresses, intruders, credentials, tor_ips, connection_frequency)
-
-    if args.summary:
-        print('[+] ----------------------------------------')
-        print(f'[+] total # of ips: {len(ip_addresses)}')
-        print(f'[+] total # of successful logins: {len(intruders)}')
-        print(f'[+] total # of tor ips: {len(tor_ips)}')
-        print('[+] ----------------------------------------')
-    print('[+] completed!')
     return
 
+def event_log_closed(store, event):
+    for login in store.successful_logins:
+        if login['session_id'] == event['session']:
+            login['log_file'] = event['ttylog']
+    return
+
+def event_session_closed(store, event):
+    for login in store.successful_logins:
+        if login['session_id'] == event['session']:
+            login['exit_timestamp'] = event['timestamp']
+            login['duration'] = event['duration']
+    return
+
+def event_file_upload(store, event):
+    for login in store.successful_logins:
+        if login['session_id'] == event['session']:
+            login['file_uploaded'] = event['filename']
+            login['outfile'] = event['outfile']
+    return
+
+def event_command_input(store, event):
+    for login in store.successful_logins:
+        if login['session_id'] == event['session']:
+            if 'commands' in login:
+                login['commands'].append(event['input'])
+            else:
+                login['commands'] = [ event['input'] ]
+    return
+
+####################################################
+#                   MISC
+####################################################
+
 '''
-load the configure file and parse it into events
+load log file into events
 '''
-def load_logs(path):
+def load_logs(store, file_path):
+    if store.verbose:
+        print('[*] loading logs...')
     try:
-        with open(path, 'r') as log_file:
+        with open(file_path, 'r') as log_file:
             for line in log_file:
-                parsed_line = json.loads(line)
-                data_set.append(parsed_line)
+                store.events.append(json.loads(line))
     except:
-        print('[!] something went wrong in load_logs!')
+        print('[!] error while loading logs!')
         exit(1)
     return
 
 '''
-write reports to disk
+write logs to disk
 '''
-def output_files(ips, intruders_list, cred_list, tor_list, repeat_list):
+def output_reports(store):
+    if store.verbose:
+        print('[*] writing logs to disk...')
     try:
-        # create dir if not exists
-        if not os.path.exists(output_path):
-            os.makedirs(output_path)
+        if not os.path.exists(store.output_path):
+            os.makedirs(store.output_path)
 
-        with open(output_path + '/ip_addresses.json', 'w') as ip_file:
-            ip_file.write(json.dumps(ips))
-        with open(output_path + '/intrusions.json', 'w') as intrusions:
-            intrusions.write(json.dumps(intruders_list))
-        with open(output_path + '/credentials.json', 'w') as creds:
-            creds.write(json.dumps(cred_list))
-        with open(output_path + '/tor_ips.json', 'w') as tor_file:
-            tor_file.write(json.dumps(tor_list))
-        with open(output_path + '/repeated_connections.json', 'w') as repeat_file:
-            repeat_file.write(json.dumps(repeat_list))
-    except:
-        print('[!] something went wrong in output_files!')
+        with open(store.output_path + '/ip_addresses.json', 'w') as ip_file:
+            ip_file.write(json.dumps(store.ip_addresses))
+        with open(store.output_path + '/successful_logins.json', 'w') as login_file:
+            login_file.write(json.dumps(store.successful_logins))
+        with open(store.output_path + '/credentials.json', 'w') as credential_file:
+            credential_file.write(json.dumps(store.credentials))
+        with open(store.output_path + '/repeated_connections.json', 'w') as repeat_file:
+            repeat_file.write(json.dumps(store.repeated_connections))
+    except Exception as ex:
+        print(ex)
+        print('[!] error writing files to disk!')
     return
 
-'''
-this method will generate a list of successful logins.
+def detect_tor_addresses(store):
+    if store.verbose:
+        print('[*] pulling tor addresses...')
 
-the structure will look like this:
-{
-    'ip_address': string,
-    'login_timestamp': string
-    'exit_timestamp': string
-    'duration': float
-    'session_id': string
-    'username': string
-    'password': string
-    'log_file': string
-    'commands': [string]
-}
-'''
-def successful_logins(events):
-    logins = list()
-    for event in events:
-        # check for successful logins
-        if event['eventid'] == 'cowrie.login.success':
-            logins.append({
-                'ip_address': event['src_ip'],
-                'login_timestamp': event['timestamp'],
-                'session_id': event['session'],
-                'username': event['username'],
-                'password': event['password']
-            })
+    all_relay_nodes = requests.get('https://lists.fissionrelays.net/tor/relays-ipv4.txt')
+    all_exit_nodes = requests.get('https://check.torproject.org/cgi-bin/TorBulkExitList.py')
 
-        # check for completed log files
-        if event['eventid'] == 'cowrie.log.closed':
-            for index, intruder in enumerate(logins):
-                if logins[index]['session_id'] == event['session']:
-                    logins[index] = { **logins[index], 'log_file': event['ttylog'] }
-
-        # check for logout times and duration
-        if event['eventid'] == 'cowrie.session.closed':
-            for index, intruder in enumerate(logins):
-                if logins[index]['session_id'] == event['session']:
-                    logins[index]['exit_timestamp'] = event['timestamp']
-                    logins[index]['duration'] = event['duration']
-
-        # check for files
-        if event['eventid'] == 'cowrie.session.file_upload':
-            for index, intruder in enumerate(logins):
-                if logins[index]['session_id'] == event['session']:
-                    logins[index]['file_uploaded'] = event['filename']
-                    logins[index]['outfile'] = event['outfile']
-
-        # check session for commands
-        if event['eventid'] == 'cowrie.command.input':
-            for index, intruder in enumerate(logins):
-                if 'commands' in logins[index] and logins[index]['session_id'] == event['session']:
-                    logins[index]['commands'].append(event['input'])
-                elif 'commands' not in logins[index] and logins[index]['session_id'] == event['session']:
-                    logins[index]['commands'] = [event['input']]
-    return logins
-
-'''
-generate a list of the unique ip addresses
-'''
-def unique_ip_addresses(events):
-    ips = list()
-    for event in events:
-        if event['src_ip'] not in ips:
-            ips.append(event['src_ip'])
-    return ips
-
-'''
-this will generate a dictionary containing each ip address and how many times
-they tried to connect.
-
-{
-    'ip': int
-}
-'''
-def repeated_connections(events):
-    repeated_attempts = dict()
-    for event in events:
-        if event['src_ip'] not in repeated_attempts:
-            repeated_attempts[event['src_ip']] = 1
-        else:
-            repeated_attempts[event['src_ip']] = repeated_attempts[event['src_ip']] + 1
-    return repeated_attempts
-
-'''
-make associations with ip and creds
-should create a list like this:
-ip: ['username:password', 'username:password']
-'''
-def used_credentials(events):
-    creds = dict()
-    for event in events:
-        if event['eventid'] == 'cowrie.login.success':
-            if event['src_ip'] in creds:
-                creds[event['src_ip']].append(f"{event['username']}:{event['password']}")
-            else:
-                creds[event['src_ip']] = [f"{event['username']}:{event['password']}"]
-    return creds
-
-'''
-detect if an ip address is a tor node
-'''
-def detect_tor(ip_list):
-    tor_nodes = list()
-    all_tor_exit_nodes = requests.get('https://check.torproject.org/cgi-bin/TorBulkExitList.py')
-    all_tor_relay_nodes = requests.get('https://lists.fissionrelays.net/tor/relays-ipv4.txt')
-
-    if all_tor_exit_nodes.status_code != 200 or all_tor_relay_nodes.status_code != 200:
-        print('[!] error while checking the tor list!')
+    if all_exit_nodes.status_code != 200 or all_relay_nodes.status_code != 200:
+        print('[!] error fetching tor lists!')
         return
 
-    exit_nodes = all_tor_exit_nodes.text
-    relay_nodes = all_tor_relay_nodes.text
-    for ip in ip_list:
-        if ip in exit_nodes:
-            tor_nodes.append(ip)
-        elif ip in relay_nodes:
-            tor_nodes.append(ip)
-    return tor_nodes
+    exit_nodes = all_exit_nodes.text
+    relay_nodes = all_relay_nodes.text
 
-'''
-get country name based on ip
-'''
-def ip_geolocation():
-    pass
+    for ip in store.ip_addresses:
+        if ip in exit_nodes or ip in relay_nodes:
+            store.tor_addresses.append(ip)
 
-'''
-ping addresses in the list of ips and determine which ones are up
-'''
-def ping():
-    pass
+            if store.remove_tor_addresses:
+                store.ip_addresses.remove(ip)
+    return
 
-'''
-run an nmap stealth scan on targets
-'''
-def scan_ip():
-    pass
+def display_summary(store):
+    print('[+] -------------------------------------')
+    print(f'[+] total # of ip addresses: {len(store.ip_addresses)}')
+    print(f'[+] total # of successful logins: {len(store.successful_logins)}')
+    print(f'[+] total # of tor users: {len(store.tor_addresses)}')
+    print('[+] -------------------------------------')
+    return
+###################################################
+#                    MAIN
+###################################################
+def main():
+    # setup arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--file', help='Relative path of log file', required=True)
+    parser.add_argument('-s', '--summary', help='Display summary of metrics', action='store_true')
+    parser.add_argument('-v', '--verbose', help='Verbose output', action='store_true')
+    parser.add_argument('-o', '--output', help='Path of output destination. Default is ./output', type=str)
+    parser.add_argument('-dt', '--detect-tor', help='Detect tor ip addresses', action='store_true')
+    args = parser.parse_args()
 
-'''
-    ENTRY
-'''
+    # initialize the store
+    store = Store()
+
+    if args.verbose:
+        store.verbose = True
+    if args.output:
+        print(args.output)
+        store.output_path = args.output
+    if args.detect_tor:
+        answer = input('[!] detecting tor ips will make 2 http requsts! do you wish to continue? (y/n) ')
+        if answer.lower() == 'n':
+            exit(0)
+        answer = input('[!] would you like to remove tor addresses from the ip report? (y/n) ')
+        if answer.lower() == 'y':
+            store.remove_tor_addresses = True
+
+    print('[*] starting analyzer...')
+
+    # load and parse the log file
+    load_logs(store, args.file)
+
+    if store.verbose:
+        print('[+] logs loaded!')
+        print('[*] parsing events...')
+
+    # capture all logins first
+    for event in store.events:
+        if event['eventid'] == 'cowrie.login.success':
+            event_login_success(store, event)
+        if event['eventid'] == 'cowrie.log.closed':
+            event_log_closed(store, event)
+        if event['eventid'] == 'cowrie.session.closed':
+            event_session_closed(store, event)
+        if event['eventid'] == 'cowrie.session.file_upload':
+            event_file_upload(store, event)
+        if event['eventid'] == 'cowrie.command.input':
+            event_command_input(store, event)
+
+    if store.verbose:
+        print('[+] all events parsed!')
+
+    if args.detect_tor:
+        detect_tor_addresses(store)
+
+    output_reports(store)
+
+    if args.summary:
+        display_summary(store)
+    print('[+] completed!')
+
 if __name__ == '__main__':
     main()
